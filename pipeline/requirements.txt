@@ -1,0 +1,7 @@
+numpy>=1.26
+scipy>=1.11
+plyfile>=1.0
+opencv-python-headless>=4.8
+torch>=2.1
+# optional, only for --auto-mask:
+# torchvision>=0.16

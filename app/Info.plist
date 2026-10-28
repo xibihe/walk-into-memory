@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+    <key>CFBundleDisplayName</key><string>Walk Into Memory</string>
+    <key>NSHandsTrackingUsageDescription</key><string>Pinch with both hands to move, rotate and scale the scene while editing; pinch once to show or hide it; pinch twice with your right hand for immersion; reach toward the scene to dissolve it; make a fist to start the wind.</string>
+    <key>NSWorldSensingUsageDescription</key><string>Keeps the scene stable as you move your head.</string>
+    <key>UIFileSharingEnabled</key><true/>
+    <key>LSSupportsOpeningDocumentsInPlace</key><true/>
+    <key>UTImportedTypeDeclarations</key><array>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.example.walkintomemory.spz</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+            <key>UTTypeDescription</key><string>Gaussian splat (SPZ)</string>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>spz</string></array>
+            </dict>
+        </dict>
+    </array>
+    <key>UIApplicationSceneManifest</key><dict>
+        <key>UIApplicationPreferredDefaultSceneSessionRole</key><string>UIWindowSceneSessionRoleApplication</string>
+        <key>UIApplicationSupportsMultipleScenes</key><true/>
+        <key>UISceneConfigurations</key><dict/>
+    </dict>
+</dict></plist>

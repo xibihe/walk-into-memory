@@ -1,0 +1,152 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+constant const int kMaxViewCount = 2;
+constant static const half kBoundsRadius = 3;
+constant static const half kBoundsRadiusSquared = kBoundsRadius*kBoundsRadius;
+
+// Spherical Harmonics constants
+// These are normalization factors for SH basis functions
+constant const float SH_C0 = 0.28209479177387814f;  // 1/(2*sqrt(pi))
+constant const float SH_C1 = 0.4886025119029199f;   // sqrt(3/(4*pi))
+
+constant const float SH_C2_0 =  1.0925484305920792f;  //  0.5 * sqrt(15/pi)
+constant const float SH_C2_1 = -1.0925484305920792f;  // -0.5 * sqrt(15/pi)
+constant const float SH_C2_2 =  0.31539156525252005f; //  0.25 * sqrt(5/pi)
+constant const float SH_C2_3 = -1.0925484305920792f;  // -0.5 * sqrt(15/pi)
+constant const float SH_C2_4 =  0.5462742152960396f;  //  0.25 * sqrt(15/pi)
+
+constant const float SH_C3_0 = -0.5900435899266435f;  // -0.25 * sqrt(35/(2*pi))
+constant const float SH_C3_1 =  2.890611442640554f;   //  0.5 * sqrt(105/pi)
+constant const float SH_C3_2 = -0.4570457994644658f;  // -0.25 * sqrt(21/(2*pi))
+constant const float SH_C3_3 =  0.3731763325901154f;  //  0.25 * sqrt(7/pi)
+constant const float SH_C3_4 = -0.4570457994644658f;  // -0.25 * sqrt(21/(2*pi))
+constant const float SH_C3_5 =  1.445305721320277f;   //  0.25 * sqrt(105/pi)
+constant const float SH_C3_6 = -0.5900435899266435f;  // -0.25 * sqrt(35/(2*pi))
+
+// Spherical harmonics degree enum - must match Swift SHDegree
+enum SHDegree: uint8_t
+{
+    SHDegree0 = 0,  // 1 coefficient (DC only)
+    SHDegree1 = 1,  // 4 coefficients
+    SHDegree2 = 2,  // 9 coefficients
+    SHDegree3 = 3   // 16 coefficients
+};
+
+enum BufferIndex: int32_t
+{
+    BufferIndexUniforms    = 0,
+    BufferIndexChunks      = 1,
+    BufferIndexSplatIndex  = 2,
+};
+
+typedef struct
+{
+    matrix_float4x4 projectionMatrix;
+    matrix_float4x4 viewMatrix;
+    packed_float3 cameraPosition;  // World-space camera position for SH evaluation
+    uint _padding0;                // Padding for alignment
+    uint2 screenSize;
+
+    // Precomputed values for covariance projection (derived from projectionMatrix and screenSize)
+    float focalX;                  // screenSize.x * projectionMatrix[0][0] / 2
+    float focalY;                  // screenSize.y * projectionMatrix[1][1] / 2
+    float tanHalfFovX;             // 1 / projectionMatrix[0][0]
+    float tanHalfFovY;             // 1 / projectionMatrix[1][1]
+
+    uint chunkCount;
+
+    /*
+     The first N splats are represented as 2N primitives and 4N vertex indices. The remainder are represented
+     as instances of these first N. This allows us to limit the size of the indexed array (and associated memory),
+     but also avoid the performance penalty of a very large number of instances.
+     */
+    uint splatCount;
+    uint indexedSplatCount;
+    uint revealEnabled;
+    float revealProgress;
+    float revealNoiseFrequency;
+    float revealFrontWidth;
+    float revealSeedRadius;
+    float revealParticleTravel;
+    float revealOriginX;
+    float revealOriginY;
+    float revealOriginZ;
+    float revealDirectionX;
+    float revealDirectionY;
+    float revealDirectionZ;
+    float revealNearDepth;
+    float revealFarDepth;
+    uint revealStyle;
+    float revealUpX;
+    float revealUpY;
+    float revealUpZ;
+    float revealLow;
+    float revealHigh;
+    float revealRadius;
+    float _revealPadding;
+    // Soft breathing edge: project with the original camera, superellipse border plus noise, slowly breathing (opacity only)
+    uint edgeEnabled;
+    float edgeTime;
+    float edgeAmp;
+    float edgeWidth;
+    float edgeM[9];
+    float edgeT[3];
+    float edgeAX, edgeBX, edgeAY, edgeBY;
+    float edgeBoxX0, edgeBoxX1, edgeBoxY0, edgeBoxY1;
+    float edgeBase, edgeMix, edgeExp, _edgePad2;
+    // Reach dissolve: one contact per hand (model-local xyz + radius), amount 0…1
+    float touchAX, touchAY, touchAZ, touchAR;
+    float touchBX, touchBY, touchBZ, touchBR;
+    float touchAAmount, touchBAmount, touchFeather, touchTime;
+    float touchUpX, touchUpY, touchUpZ, touchDrift;
+    // Wind: per-Gaussian wind weight from image position, height above the floor and colour; 0 inside the still box
+    uint windEnabled;
+    float windTime, windStrength, windGround;
+    float windUp, windDirX, windDirZ, windShimmer;
+    float windBoxX0, windBoxX1, windBoxY0, windBoxY1;
+    float windWaterX0, windWaterX1, windWaterY0, windWaterY1;
+    float windBoxZ, _windPad0, _windPad1, _windPad2; // The still box only protects points nearer than this depth (m); trees behind still sway
+} Uniforms;
+
+typedef struct
+{
+    Uniforms uniforms[kMaxViewCount];
+} UniformsArray;
+
+// Keep in sync with EncodedSplatPoint
+typedef struct
+{
+    packed_float3 position;
+    packed_half4 color;
+    packed_half3 covA;
+    packed_half3 covB;
+} Splat;
+
+// Keep in sync with Swift: ChunkedSplatIndex
+typedef struct
+{
+    uint16_t chunkIndex;
+    uint16_t _padding;
+    uint32_t splatIndex;
+} ChunkedSplatIndex;
+
+// Information about a single chunk, used in the chunk table
+typedef struct
+{
+    device Splat* splats;
+    device half* shCoefficients;   // Null for SH degree 0, otherwise higher-order SH coefficients
+    uint32_t splatCount;
+    SHDegree shDegree;             // Spherical harmonics degree for this chunk
+    uint8_t enabled;               // Non-zero = enabled for rendering
+    uint8_t _shPadding[2];         // Padding for alignment
+} ChunkInfo;
+
+typedef struct
+{
+    float4 position [[position]];
+    half2 relativePosition; // Ranges from -kBoundsRadius to +kBoundsRadius
+    half4 color;
+} FragmentIn;
