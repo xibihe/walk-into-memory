@@ -74,6 +74,22 @@ python -m wim run demo/synthetic.ply --mask demo/synthetic_mask.png --target 300
 ./tests/run_e2e.sh                                          # 端到端冒烟测试
 ```
 
+### 一键：照片 → 场景（`pipeline/photo_to_splat.py`）
+
+**路线 A：本地一键脚本。** 先检查电脑能不能跑 ML Sharp：
+
+```bash
+cd pipeline && pip install -r requirements.txt
+python photo_to_splat.py --check
+python photo_to_splat.py photo.jpg -o out/scene.spz --points 560000   # 有人物加 --auto-mask
+```
+
+ML Sharp 生成支持 CPU、NVIDIA CUDA 和 Apple Silicon（MPS），CPU 能跑但很慢；首次运行会下载约 300 MB 的模型。脚本会依次完成：ML Sharp 生成 → 去掉画框外的杂点 → 按贡献度精简到约 50–60 万点 → 摆正地面 → 输出 SPZ。
+
+**路线 B：本地跑不了。** 推荐免费的 [PhotoSplat3D](https://photosplat3d.com/en/)（[源码](https://github.com/zlinoliver/PhotoSplat3D)），基于同一个 ML Sharp 模型，全程在设备上运行、不上传照片。Mac 版需要 Apple Silicon M2 及以上，也可以直接在 Vision Pro 上装 App Store 版（visionOS 26+）。它导出 `.ply`，可以直接导入本 App，或者用 `python photo_to_splat.py photo.jpg --ply 导出的.ply -o out/scene.spz` 再清理一遍。
+
+**导入头显：** 把文件通过隔空投送或「文件」传到 Vision Pro，在 App 里导入。支持 spz / sog / ply / splat，超过 300 万点的文件会自动精简。
+
 ### 3. 编译到 Apple Vision Pro（`app/`）
 
 ```sh
@@ -190,6 +206,22 @@ python -m wim run demo/synthetic.ply --mask demo/synthetic_mask.png --target 300
   "wind": { "ground": 1.52, "up": -1.0, "stillBox": [x0, x1, y0, y1], "stillDepth": 3.1,
             "waterBox": [x0, x1, y0, y1] /* optional */ } }
 ```
+
+### One command: photo → scene (`pipeline/photo_to_splat.py`)
+
+**Path A: run locally.** Check your machine first:
+
+```bash
+cd pipeline && pip install -r requirements.txt
+python photo_to_splat.py --check
+python photo_to_splat.py photo.jpg -o out/scene.spz --points 560000   # add --auto-mask for people
+```
+
+ML Sharp prediction runs on CPU, NVIDIA CUDA or Apple Silicon (MPS); CPU works but is slow, and the first run downloads a ~300 MB checkpoint. The script runs ML Sharp → drops out-of-frame floaters → prunes by contribution to ~500–600k → levels the floor → writes SPZ.
+
+**Path B: can't run locally.** Use the free [PhotoSplat3D](https://photosplat3d.com/en/) ([source](https://github.com/zlinoliver/PhotoSplat3D)). It uses the same ML Sharp model and runs fully on-device with no upload: Mac app on Apple Silicon M2 or later, or the Vision Pro App Store app (visionOS 26+). It exports `.ply`; import that straight into the app, or clean it with `python photo_to_splat.py photo.jpg --ply exported.ply -o out/scene.spz`.
+
+**Into the headset:** AirDrop or Files the file to Vision Pro and import it in the app. spz / sog / ply / splat are supported; files over 3M points are trimmed automatically.
 
 ### 3. Build for Apple Vision Pro (`app/`)
 
