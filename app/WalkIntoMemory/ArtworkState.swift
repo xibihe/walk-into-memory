@@ -21,7 +21,8 @@ enum SceneDetail: String, CaseIterable, Identifiable, Sendable {
 enum CFG {
     static let sceneAssetsFolder = "SceneAssets" // Bundled scenes: put one <name>.spz (+ <name>.json) here.
     static let positionStep: Float = 0.10 // Window nudge buttons move 10 cm.
-    static let maxPoints = 4_000_000 // Upper limit when reading a file.
+    static let maxPoints = 4_000_000 // Memory cap while reading; larger files are pruned on the fly instead of failing.
+    static let renderPointBudget = 3_000_000 // Final render cap; extra Gaussians are dropped by visual contribution.
     static let minimumOpacity: Float = 1.0 / 255 // Invisible at 8-bit precision; dropped while loading.
     static let maxFramesInFlight = 1 // Normal frame pacing.
     static let recordingFramesInFlight = 2 // While recording, overlap CPU/GPU by at most two frames.
@@ -41,7 +42,7 @@ enum CFG {
     static let maximumScale: Float = 10
     static let gestureDamping: Double = 0.025 // Exponential smoothing, no overshoot.
     static let maximumGestureGap: Double = 0.15 // Re-grab after a long tracking gap.
-    static let defaultRevealDuration: Double = 1.6 // Seconds for show/hide.
+    static let defaultRevealDuration: Double = 3.0 // Seconds for show/hide (front-to-back reveal).
     static let revealNoiseFrequency: Float = 1.3 // Noise cycles per metre; scaled with the scene.
     static let revealFrontWidth: Float = 0.24 // The particle front takes 24% of the progress.
     static let revealSeedRadius: Float = 0.003 // Newborn particle radius, 3 mm.
@@ -199,6 +200,7 @@ struct RenderState: Sendable {
     var revealDirection = SIMD3<Float>(0, 0, -1)
     var revealNearDepth: Float = 0
     var revealFarDepth: Float = 10
+    var revealQuantiles = [Float]()
     var sceneRevealed = true
     var transitionDuration = CFG.defaultRevealDuration
     var visibilityStart: Double = -.infinity
@@ -259,12 +261,15 @@ struct RenderState: Sendable {
             .filter { $0.isFinite && $0 >= 0 }.sorted()
         let minimumSpan = 0.25 / placement.scale
         if !depths.isEmpty {
+            revealQuantiles = (0...16).map { depths[Int(Float(depths.count - 1) * Float($0) / 16)] }
+            for i in 1..<17 { revealQuantiles[i] = max(revealQuantiles[i], revealQuantiles[i - 1] + 0.0005) }
             revealNearDepth = depths[Int(Float(depths.count - 1) * 0.02)]
             revealFarDepth = max(revealNearDepth + minimumSpan,
                                  depths[Int(Float(depths.count - 1) * 0.98)])
         } else {
             revealNearDepth = 0
             revealFarDepth = 10 / placement.scale
+            revealQuantiles = []
         }
         let heights = revealSamples.map { simd_dot($0 - revealOrigin, revealUp) }.sorted()
         if !heights.isEmpty {
@@ -323,10 +328,10 @@ final class ArtworkSession {
     /// fades away over the room.
     private var immersionSynced = false
     var revealStyle: RevealStyle = RevealStyle(rawValue:
-        UInt32(clamping: UserDefaults.standard.integer(forKey: "RevealStyle"))) ?? .spread {
+        UInt32(clamping: UserDefaults.standard.integer(forKey: "RevealStyleV2"))) ?? .spread {
         didSet {
             bridge.state.withLock { $0.selectedRevealStyle = revealStyle }
-            UserDefaults.standard.set(Int(revealStyle.rawValue), forKey: "RevealStyle")
+            UserDefaults.standard.set(Int(revealStyle.rawValue), forKey: "RevealStyleV2")
         }
     }
     var revealDuration = CFG.defaultRevealDuration {

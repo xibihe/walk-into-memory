@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 /// Scene files plus the JSON sidecar written by the pipeline.
 private let importTypes: [UTType] = ["spz", "ply", "splat", "sog"]
-    .compactMap { UTType(filenameExtension: $0, conformingTo: .data) } + [.json]
+    .compactMap { UTType(filenameExtension: $0, conformingTo: .data) } + [.json, .data] // .data: fallback when a provider hides the extension
 
 @main
 struct WalkIntoMemoryApp: App {
@@ -91,10 +91,10 @@ struct ArtworkControls: View {
                 .pickerStyle(.menu)
                 Text(artwork.revealStyle.detail)
                     .font(.caption).foregroundStyle(.secondary)
-                parameter("Reveal time", value: $artwork.revealDuration, range: 1...2, unit: " s")
+                parameter("Reveal time", value: $artwork.revealDuration, range: 1.5...4, unit: " s")
 
                 HStack {
-                    Button("Import scene (.spz + .json)") { picking = true }
+                    Button("Import scene (.spz / .ply / .sog / .splat)") { picking = true }
                         .disabled(artwork.transitioning || artwork.importing)
                     if artwork.isImmersive {
                         Button("Leave space") {

@@ -50,6 +50,46 @@ inline void applyReveal(thread Splat &splat, Uniforms uniforms) {
     float3 origin = float3(uniforms.revealOriginX, uniforms.revealOriginY, uniforms.revealOriginZ);
     float3 forward = float3(uniforms.revealDirectionX, uniforms.revealDirectionY, uniforms.revealDirectionZ);
     float3 up = float3(uniforms.revealUpX, uniforms.revealUpY, uniforms.revealUpZ);
+
+    if (uniforms.revealStyle == 1) {
+        // Spread, front to back like a memory coming back.
+        // 1) Stagger by view-depth quantile (17 quantiles from 4096 CPU samples), not by metres:
+        //    a dense foreground only takes its share of the time, so it never floods in at once.
+        float d = dot(p - origin, forward);
+        float pct = 0.0f;
+        if (d >= uniforms.revealQ[16]) {
+            pct = 1.0f;
+        } else if (d > uniforms.revealQ[0]) {
+            for (int i = 0; i < 16; i++) {
+                float a = uniforms.revealQ[i], b = uniforms.revealQ[i + 1];
+                if (d <= b) { pct = (float(i) + saturate((d - a) / max(1e-5f, b - a))) / 16.0f; break; }
+            }
+        }
+        // 2) Gentle noise (regional low frequency + per-point grain) so the front breathes instead of a wall.
+        float regional = revealNoise(p * uniforms.revealNoiseFrequency);
+        float grainS = revealHash(p * 73.19f + float3(3.1f, 7.2f, 1.7f));
+        const float window = 0.24f;               // each point forms over 24% of the total time
+        float arrival = clamp(pct * 0.68f + 0.055f * regional + 0.025f * grainS, 0.0f, 1.0f - window);
+        float ph = saturate((progress - arrival) / window);
+        if (ph <= 0.0f) { splat.color.a = 0.0h; return; }
+        if (ph >= 1.0f) return;                    // formed: untouched from here on
+        float e = ph * ph * ph * (ph * (ph * 6.0f - 15.0f) + 10.0f); // smootherstep
+        // 3) Size grows monotonically from 12% to 100%, never above the original (no swelling).
+        float g = mix(0.12f, 1.0f, e);
+        // 4) Opacity fades in ahead of size for a soft, grainy glow.
+        float alpha = smoothstep(0.0f, 0.55f, ph);
+        // 5) Drift a few centimetres back into place from slightly further and lower, like focusing.
+        float3 drift = float3(revealHash(p * 47.31f + float3(1.8f, 8.3f, 2.4f)),
+                              revealHash(p * 59.73f + float3(6.4f, 2.1f, 9.5f)), grainS) * 2.0f - 1.0f;
+        float rem = 1.0f - e;
+        float3 pos = p + (0.35f * drift + 0.65f * forward - 0.25f * up) * uniforms.revealParticleTravel * rem * rem;
+        splat.color.a *= half(alpha);
+        float g2 = g * g;
+        splat.covA = packed_half3(float3(splat.covA) * g2);
+        splat.covB = packed_half3(float3(splat.covB) * g2);
+        splat.position = packed_float3(pos);
+        return;
+    }
     float3 center = origin + forward * (0.5f * (uniforms.revealNearDepth + uniforms.revealFarDepth))
                           + up * (0.5f * (uniforms.revealLow + uniforms.revealHigh));
     float3 q = p - center;

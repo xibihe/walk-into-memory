@@ -188,7 +188,11 @@ final class ArtworkRenderer: @unchecked Sendable {
         for try await batch in try await reader.read() {
             try Task.checkCancellation()
             sourceCount += batch.count
-            guard sourceCount <= CFG.maxPoints else { throw ArtworkLoadError.tooManyPoints }
+            // Very large files (e.g. ~10M points) are pruned while reading instead of failing.
+            if points.count > CFG.maxPoints {
+                bridge.state.withLock { $0.message = "Large scene (\(sourceCount.formatted()) read), trimming…" }
+                points = Self.prune(points, fraction: Double(CFG.maxPoints) * 0.5 / Double(points.count))
+            }
             for point in batch {
                 let p = point.position
                 guard p.x.isFinite && p.y.isFinite && p.z.isFinite else {
@@ -201,6 +205,9 @@ final class ArtworkRenderer: @unchecked Sendable {
         guard !points.isEmpty else { throw ArtworkLoadError.empty }
         bridge.state.withLock { $0.message = "Ranking Gaussians by visual contribution…" }
         points = Self.prune(points, fraction: detail.fraction)
+        if points.count > CFG.renderPointBudget {
+            points = Self.prune(points, fraction: Double(CFG.renderPointBudget) / Double(points.count))
+        }
         guard !points.isEmpty else { throw ArtworkLoadError.empty }
         try Task.checkCancellation()
         let splat = try SplatRenderer(device: layer.device,
@@ -651,7 +658,7 @@ final class ArtworkRenderer: @unchecked Sendable {
                     } else {
                         splat.wind = nil
                     }
-                    let reveal = SplatRenderer.RevealEffect(
+                    var reveal = SplatRenderer.RevealEffect(
                         progress: visibility,
                         noiseFrequency: CFG.revealNoiseFrequency * state.placement.scale,
                         frontWidth: CFG.revealFrontWidth,
@@ -661,6 +668,7 @@ final class ArtworkRenderer: @unchecked Sendable {
                         nearDepth: state.revealNearDepth, farDepth: state.revealFarDepth,
                         style: state.activeRevealStyle.rawValue, up: state.revealUp,
                         low: state.revealLow, high: state.revealHigh, radius: state.revealRadius)
+                    reveal.depthQuantiles = state.revealQuantiles
                     do {
                         ready = try splat.render(viewports: indices.map { viewports[$0] },
                             colorTexture: drawable.colorTextures[textureIndex], colorStoreAction: .store,

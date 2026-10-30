@@ -61,6 +61,8 @@ public final class SplatRenderer: @unchecked Sendable {
         public var low: Float
         public var high: Float
         public var radius: Float
+        /// 17 view-depth quantiles (model space); empty = linear near...far.
+        public var depthQuantiles: [Float] = []
 
         public init(progress: Float = 1,
                     noiseFrequency: Float = 1.3,
@@ -165,6 +167,9 @@ public final class SplatRenderer: @unchecked Sendable {
         var windBoxX0: Float = 0, windBoxX1: Float = 0, windBoxY0: Float = 0, windBoxY1: Float = 0
         var windWaterX0: Float = 0, windWaterX1: Float = 0, windWaterY0: Float = 0, windWaterY1: Float = 0
         var windBoxZ: Float = 1000, _windPad0: Float = 0, _windPad1: Float = 0, _windPad2: Float = 0
+        // Spread reveal depth quantiles (keep in sync with ShaderCommon.h)
+        var revealQ: (Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float, Float) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        var _revealQPad: (Float, Float, Float) = (0, 0, 0)
     }
 
     // Keep in sync with Shaders.metal : UniformsArray
@@ -837,6 +842,16 @@ public final class SplatRenderer: @unchecked Sendable {
                                     revealLow: revealEffect.low,
                                     revealHigh: revealEffect.high,
                                     revealRadius: revealEffect.radius)
+            if revealEffect.depthQuantiles.count == 17 {
+                let q = revealEffect.depthQuantiles
+                uniforms.revealQ = (q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8],
+                                    q[9], q[10], q[11], q[12], q[13], q[14], q[15], q[16])
+            } else {
+                let n = revealEffect.nearDepth, f = revealEffect.farDepth
+                func l(_ i: Float) -> Float { n + (f - n) * i / 16 }
+                uniforms.revealQ = (l(0), l(1), l(2), l(3), l(4), l(5), l(6), l(7), l(8),
+                                    l(9), l(10), l(11), l(12), l(13), l(14), l(15), l(16))
+            }
             if let e = edgeBreath, e.frame.count >= 24 {
                 let f = e.frame
                 uniforms.edgeEnabled = 1

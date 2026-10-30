@@ -14,6 +14,30 @@
                 <key>public.filename-extension</key><array><string>spz</string></array>
             </dict>
         </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.example.walkintomemory.ply</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+            <key>UTTypeDescription</key><string>Gaussian splat (PLY)</string>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>ply</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.example.walkintomemory.sog</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+            <key>UTTypeDescription</key><string>Gaussian splat (SOG)</string>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>sog</string></array>
+            </dict>
+        </dict>
+        <dict>
+            <key>UTTypeIdentifier</key><string>com.example.walkintomemory.splat</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+            <key>UTTypeDescription</key><string>Gaussian splat (.splat)</string>
+            <key>UTTypeTagSpecification</key><dict>
+                <key>public.filename-extension</key><array><string>splat</string></array>
+            </dict>
+        </dict>
     </array>
     <key>UIApplicationSceneManifest</key><dict>
         <key>UIApplicationPreferredDefaultSceneSessionRole</key><string>UIWindowSceneSessionRoleApplication</string>

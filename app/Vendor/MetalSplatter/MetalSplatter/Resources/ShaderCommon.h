@@ -109,6 +109,10 @@ typedef struct
     float windBoxX0, windBoxX1, windBoxY0, windBoxY1;
     float windWaterX0, windWaterX1, windWaterY0, windWaterY1;
     float windBoxZ, _windPad0, _windPad1, _windPad2; // The still box only protects points nearer than this depth (m); trees behind still sway
+    // Spread reveal: 17 view-depth quantiles (0%, 6.25%, ... 100%); stagger by quantile, not metres,
+    // so a dense foreground does not appear all at once.
+    float revealQ[17];
+    float _revealQPad[3];
 } Uniforms;
 
 typedef struct

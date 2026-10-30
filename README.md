@@ -100,10 +100,16 @@ open app/WalkIntoMemory.xcodeproj
 1. 选中 **WalkIntoMemory** 目标 → *Signing & Capabilities*，选你的团队，把 bundle id（`com.example.WalkIntoMemory`）改成你自己的。
 2. 在设备上编译运行，Swift 包（`spz-swift`、`ZIPFoundation`）会自动解析。
    不签名只验证编译：`xcodebuild -project app/WalkIntoMemory.xcodeproj -scheme WalkIntoMemory -destination 'generic/platform=visionOS' CODE_SIGNING_ALLOWED=NO build`
-3. 放场景：编译前把 `name.spz` + `name.json` 放进 `app/WalkIntoMemory/SceneAssets/`，或在 App 里点 **Import scene (.spz + .json)** 同时选中两个文件。
+3. 放场景：编译前把 `name.spz` + `name.json` 放进 `app/WalkIntoMemory/SceneAssets/`，或在 App 里点 **Import scene (.spz / .ply / .sog / .splat)** 同时选中场景文件和 JSON。
 4. 点 **Open space**，双手摆放场景，点 **Finish editing · lock placement**，捏一下让它浮现。
 
 没有 JSON 附带文件时，App 也能显示任意 `.spz/.ply/.splat/.sog`，但伸手消散、风、沉浸柔边和照片位姿会关闭。
+
+**渲染器细节**
+- 导入：`.spz` `.ply` `.sog` `.splat` 都已在 Info.plist 注册，文件选择器里不会变灰。
+- 大场景：读取时超过 400 万点会边读边按视觉贡献精简，最终渲染上限 300 万点，不再报错。
+- 入场（Spread）：按视线深度的分位数由近及远浮现，前景再密也不会一下涌出；每个点只从 12% 长到原尺寸、绝不变大，先淡入再轻轻飘回原位。默认 3 秒，可在 1.5–4 秒之间调。
+- 浮现完成后场景保持不变，走动时不会消失或被裁切；只有带 JSON 的照片场景在伸手时才会消散。
 
 ### 谁做了什么
 
@@ -233,10 +239,16 @@ open app/WalkIntoMemory.xcodeproj
 1. Select the **WalkIntoMemory** target → *Signing & Capabilities*, choose your team and change the bundle id (`com.example.WalkIntoMemory`).
 2. Build and run on the device. Swift packages (`spz-swift`, `ZIPFoundation`) resolve automatically.
    Compile check without signing: `xcodebuild -project app/WalkIntoMemory.xcodeproj -scheme WalkIntoMemory -destination 'generic/platform=visionOS' CODE_SIGNING_ALLOWED=NO build`
-3. Add a scene: drop `name.spz` + `name.json` into `app/WalkIntoMemory/SceneAssets/` before building, or use **Import scene (.spz + .json)** in the app and select both files.
+3. Add a scene: drop `name.spz` + `name.json` into `app/WalkIntoMemory/SceneAssets/` before building, or use **Import scene (.spz / .ply / .sog / .splat)** in the app and select the scene file plus its JSON.
 4. Tap **Open space**, place the scene with both hands, tap **Finish editing · lock placement**, then pinch once to make it appear.
 
 Without a sidecar the app still renders any `.spz/.ply/.splat/.sog`, but reach dissolve, wind, immersion edges and photo placement are off.
+
+**Renderer notes**
+- Import: `.spz`, `.ply`, `.sog` and `.splat` are all declared in Info.plist, so none are greyed out in the file picker.
+- Large scenes: files above 4M Gaussians are trimmed by visual contribution while reading; the render cap is 3M. No more load errors.
+- Intro (Spread): Gaussians appear front to back by view-depth quantile, so a dense foreground never floods in at once. Each one grows from 12% to its original size (never larger), fades in first and drifts a few centimetres into place. 3 s by default, adjustable 1.5–4 s.
+- Once revealed the scene stays constant while you walk (no distance culling); only sidecar photo scenes dissolve, and only when you reach into them.
 
 ### Who made what
 
